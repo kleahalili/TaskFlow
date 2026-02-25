@@ -46,6 +46,15 @@
           />
 
           <Button
+            v-if="hasActiveFilters"
+            icon="pi pi-filter-slash"
+            label="Clear"
+            severity="secondary"
+            outlined
+            @click="clearFilters"
+          />
+
+          <Button
             icon="pi pi-plus"
             label="New Task"
             @click="openCreateDialog"
@@ -145,7 +154,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useConfirm } from 'primevue/useconfirm'
 import { useToast } from 'primevue/usetoast'
@@ -199,6 +208,22 @@ function formatDate(d: Date | null): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+const hasActiveFilters = computed(() =>
+  !!taskStore.filters.search || !!taskStore.filters.status || !!dueDateFrom.value || !!dueDateTo.value
+)
+
+function clearFilters() {
+  taskStore.filters.search = ''
+  taskStore.filters.status = ''
+  taskStore.filters.due_date_from = ''
+  taskStore.filters.due_date_to = ''
+  taskStore.filters.page = 1
+  dueDateFrom.value = null
+  dueDateTo.value = null
+  taskStore.syncFilters(router)
+  taskStore.fetchTasks()
 }
 
 function onDateChange() {
