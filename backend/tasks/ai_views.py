@@ -19,7 +19,6 @@ class AITaskSuggestView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Make sure the task belongs to the requesting user
         try:
             task = Task.objects.get(id=task_id, user=request.user)
         except Task.DoesNotExist:
@@ -53,7 +52,7 @@ Be specific and practical. Format your response as a simple numbered list."""
                     'Content-Type': 'application/json',
                 },
                 json={
-                    'model': 'mistralai/mistral-7b-instruct:free',
+                    'model': 'mistralai/mistral-7b-instruct',
                     'messages': [
                         {'role': 'user', 'content': prompt}
                     ],
@@ -62,17 +61,33 @@ Be specific and practical. Format your response as a simple numbered list."""
                 timeout=30.0
             )
 
-            if response.status_code == 429:
-                return Response(
-                    {'detail': 'AI service rate limit reached. Please try again later.'},
-                    status=status.HTTP_429_TOO_MANY_REQUESTS
+            if response.status_code != 200:
+                try:
+                    error_body = response.json()
+                    upstream_message = error_body.get('error', {}).get('message', '')
+                except Exception:
+                    upstream_message = response.text
+
+                print(
+                    f"[AI] OpenRouter error {response.status_code}: {upstream_message}"
                 )
 
-            if response.status_code != 200:
-                return Response(
-                    {'detail': 'AI service is currently unavailable.'},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                code_map = {
+                    401: 'AI service authentication failed — check OPENROUTER_API_KEY.',
+                    402: 'AI service requires credits — check your OpenRouter account.',
+                    404: 'AI model not found — the model ID may have changed.',
+                    429: 'AI service rate limit reached. Please try again later.',
+                }
+                detail = code_map.get(
+                    response.status_code,
+                    f'AI service returned an unexpected error (HTTP {response.status_code}).',
                 )
+                http_status = (
+                    status.HTTP_429_TOO_MANY_REQUESTS
+                    if response.status_code == 429
+                    else status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+                return Response({'detail': detail}, status=http_status)
 
             data = response.json()
             suggestion = data['choices'][0]['message']['content']
